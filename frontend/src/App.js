@@ -2,10 +2,11 @@ import React, { useState, useEffect } from "react";
 import "./App.css";
 
 const App = () => {
-  const [selectedItem, setSelectedItem] = useState([]);
   const [products, setProducts] = useState([]);
+  const [selectedItem, setSelectedItem] = useState([]);
   const [showFlex, setShowFlex] = useState("");
   const [balance, setBalance] = useState(0);
+  const [money, setMoney] = useState([]);
 
   // ดึงข้อมูลจากสินค้าจาก API
   useEffect(() => {
@@ -49,14 +50,14 @@ const App = () => {
     );
   };
 
-  // ฟังก์ชันกดเลือกสินค้า
+  // ฟังก์ชันเลือกสินค้า
   const clickProduct = (product_id, product_name, product_price) => {
     setSelectedItem([product_id, product_name, product_price]);
   };
 
-  // ฟังก์ชันเมื่อกดสั่งซื้อ
+  // ฟังก์ชันกดสั่งซื้อ
   const clickPurchase = () => {
-    if (selectedItem) {
+    if (selectedItem !== "") {
       setShowFlex("d-flex");
     }
   };
@@ -64,29 +65,58 @@ const App = () => {
   // ฟังก์ชันเมื่อกดสั่งซื้อ
   const cancelPurchase = () => {
     setShowFlex("");
+    setSelectedItem([]);
   };
 
   // ฟังก์ชันใส่เงิน
-  const addMoney = (money) => {
-    setBalance((prevBalance) => prevBalance + money);
+  const addMoney = (value) => {
+    const updatedMoney = [...money, value];
+    setMoney(updatedMoney);
+    setBalance((prevBalance) => prevBalance + value);
   };
 
   // ฟังก์ชันคืนเงิน
   const refund = () => {
     setBalance(0);
+    setMoney([]);
+  };
+
+  // ฟังก์ชันชำระเงิน
+  const sendOrder = () => {
+    const orderData = {
+      product_id: selectedItem[0],
+      balance: balance,
+      money: money,
+    };
+    console.log(JSON.stringify(orderData))
+    fetch("http://localhost:5000/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(orderData),
+    })
+      .then((res) => res.json())
+      .then((result) => {
+        console.log(result);
+      })
+      .catch((err) => {
+        console.error("Error:", err);
+      });
   };
 
   return (
     <div className="px-5">
+      {/* หน้าหลัก */}
       <h1 className="my-4 text-center">Vending Machine</h1>
       <div className="row">{renderItems()}</div>
       <div className="text-end">
         <button
           className="btn btn-primary btn-lg btn-block mt-4"
           onClick={clickPurchase}
-          disabled={!selectedItem}
+          disabled={selectedItem === ""}
         >
-          {selectedItem ? "สั่งซื้อ" : "กรุณาเลือกสินค้า"}
+          {selectedItem !== "" ? "Purchase" : "Choose Product"}
         </button>
       </div>
 
@@ -109,23 +139,54 @@ const App = () => {
               </p>
               <div className="row text-center">
                 <div className="col-4 mb-2">
-                  <div className="coin1" onClick={() => addMoney(1)}>1</div>
+                  <div className="coin1" onClick={() => addMoney(1, 1)}>
+                    1
+                  </div>
                 </div>
                 <div className="col-4 mb-2">
-                  <div className="coin5" onClick={() => addMoney(5)}>5</div>
+                  <div className="coin5" onClick={() => addMoney(5, 1)}>
+                    5
+                  </div>
                 </div>
                 <div className="col-4 mb-2">
-                  <div className="coin10" onClick={() => addMoney(10)}>10</div>
+                  <div className="coin10" onClick={() => addMoney(10, 1)}>
+                    10
+                  </div>
                 </div>
               </div>
               <div className="row text-center">
-                <div className="col-4 mb-2 bn20" onClick={() => addMoney(20)}>20</div>
-                <div className="col-4 mb-2 bn50" onClick={() => addMoney(50)}>50</div>
-                <div className="col-4 mb-2 bn100" onClick={() => addMoney(100)}>100</div>
+                <div
+                  className="col-4 mb-2 bn20"
+                  onClick={() => addMoney(20, 2)}
+                >
+                  20
+                </div>
+                <div
+                  className="col-4 mb-2 bn50"
+                  onClick={() => addMoney(50, 2)}
+                >
+                  50
+                </div>
+                <div
+                  className="col-4 mb-2 bn100"
+                  onClick={() => addMoney(100, 2)}
+                >
+                  100
+                </div>
               </div>
               <div className="row text-center">
-                <div className="col-6 mb-2 bn500" onClick={() => addMoney(500)}>500</div>
-                <div className="col-6 mb-2 bn1000" onClick={() => addMoney(1000)}>1000</div>
+                <div
+                  className="col-6 mb-2 bn500"
+                  onClick={() => addMoney(500, 2)}
+                >
+                  500
+                </div>
+                <div
+                  className="col-6 mb-2 bn1000"
+                  onClick={() => addMoney(1000, 2)}
+                >
+                  1000
+                </div>
               </div>
             </div>
             <hr />
@@ -140,13 +201,21 @@ const App = () => {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-warning ms-3"
+                  className={`btn btn-warning ms-3 ${
+                    balance === 0 ? "disabled" : ""
+                  }`}
                   onClick={refund}
                 >
                   Refund
                 </button>
               </div>
-              <button type="button" className="btn btn-success">
+              <button
+                type="button"
+                className={`btn btn-success ${
+                  balance < selectedItem[2] ? "disabled" : ""
+                }`}
+                onClick={sendOrder}
+              >
                 Pay icon
               </button>
             </div>
