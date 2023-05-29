@@ -10,8 +10,19 @@ const connection = mysql.createConnection({
   database: process.env.DB_DATABASE,
 });
 
+var app = express();
+app.use(express.json());
+app.use(cors());
+
+// แสดงรายการสินค้าทั้งหมด
+app.get("/products", function (req, res, next) {
+  connection.query("SELECT * FROM `products`", function (err, results, fields) {
+    res.json(results);
+  });
+});
+
 // ฟังก์ชันคำนวณ จำนวนเงินที่ต้องทอน
-function getChange(price_change, out_of_cash) {
+function getChange(price_change, money_stock) {
   var money = {
     1000: 0,
     500: 0,
@@ -23,36 +34,34 @@ function getChange(price_change, out_of_cash) {
     1: 0,
   };
   var money_arr = [1000, 500, 100, 50, 20, 10, 5, 1];
-  // ถ้ามีเหรียญ/ธนบัติที่หมด ให้ลบค่าใน money ที่จะคืน ออก
-  if (out_of_cash !== null) {
-    // วนลูปเอาหน่วยเงินที่ไม่มีในสต็อกออกจากการคำนวณ
-    out_of_cash.forEach((element) => {
-      delete money.element;
-      money_arr = money_arr.filter((el) => el !== element);
-    });
-  }
   // วนลูปคำนวณหน่วยเงินแต่ละอันที่ต้องทอน
   money_arr.forEach((d, i) => {
+    // console.log("price_change:"+price_change);
+
     // คำนวณจำนวนหน่วยปัจจุบันที่สามารถใช้ทอนได้ โดยปัดเศษลงเพื่อให้ได้ค่าที่ใกล้และทอนได้
     var num = Math.floor(price_change / d);
-    // ปรับจำนวนเงินที่เหลืออยู่ -เอาเศษมาใช้
-    price_change = price_change % d;
-    // บวกหน่วยเงินนั้นตามจำนวนที่สามารถทอนเงินได้
-    money[d] += num;
+
+    // console.log("num:"+num);
+    // console.log("money_stock:"+money_stock[d]);
+
+    // ถ้าจำนวนธนบัติที่ต้องทอน มีเพียงพอในสต็อก
+    if (num <= money_stock[d]) {
+      // ปรับจำนวนเงินที่เหลืออยู่ -เอาเศษมาใช้
+      price_change = price_change % d;
+      // บวกหน่วยเงินนั้นตามจำนวนที่สามารถทอนเงินได้
+      money[d] += num;
+    } else if (num > money_stock[d] && money_stock[d] !== 0) {
+      // ปรับจำนวนเงินที่เหลืออยู่ -เอาเศษมาใช้
+      price_change = price_change - d * money_stock[d];
+      // บวกหน่วยเงินนั้นตามจำนวนที่สามารถทอนเงินได้
+      money[d] += money_stock[d];
+    }
   });
+
+  // console.log(money);
+
   return money;
 }
-
-var app = express();
-app.use(express.json());
-app.use(cors());
-
-// แสดงรายการสินค้าทั้งหมด
-app.get("/products", function (req, res, next) {
-  connection.query("SELECT * FROM `products`", function (err, results, fields) {
-    res.json(results);
-  });
-});
 
 // คำนวณออเดอร์
 app.post("/orders", function (req, res, next) {
@@ -85,9 +94,9 @@ app.post("/orders", function (req, res, next) {
           messsage: product_name + " Out of stock!",
         };
         return res.json(product);
-      }else{
+      } else {
         // หน่วยเงินที่หมด
-        let out_of_cash = [];
+        let money_stock = {};
         // ถ้าจำนวนเงินที่รับมามากกว่าราคาสินค้า
         if (req_balance > product_price) {
           // ปรับเพิ่มสต๊อกเหรียญ/แบงค์ จากที่ลูกค้าใส่เข้ามา
@@ -113,20 +122,16 @@ app.post("/orders", function (req, res, next) {
                 console.error("Error executing query:", err);
                 return;
               }
+              // วนลูปกำหนดค่าหน่วยเงินที่มีในสต็อกเพื่อใช้ในการคำนวณเงินทอน
               results.forEach((data) => {
-                // เช็คหน่วยเงินที่ไม่มีในสต็อก
-                if (data.quantity === 0) {
-                  out_of_cash.push(data.cost);
-                }
+                money_stock[data.cost] = data.quantity;
               });
               // คำนวณจำนวนเงินที่ต้องทอน
               price_change = req_balance - product_price;
-              money_changes = getChange(price_change, out_of_cash);
-              console.log(money_changes);
-  
+              // เรียกใช้ฟังก์ชันคำนวณเงินทอน
+              money_changes = getChange(price_change, money_stock);
               // ปรับลดสต๊อกเหรียญ/แบงค์ จากที่ทอนลูกค้า
               for (let key in money_changes) {
-                console.log(key + ":" + money_changes[key]);
                 connection.query(
                   "UPDATE money SET quantity = quantity-? WHERE cost = ?",
                   [money_changes[key], key],
@@ -139,29 +144,52 @@ app.post("/orders", function (req, res, next) {
                   }
                 );
               }
+              // ปรับลดสต็อกสินค้า
+              connection.query(
+                "UPDATE products SET amount = amount-? WHERE id = ?",
+                [1, product_id],
+                (err, results, fields) => {
+                  // เช็ค error การค้นหา
+                  if (err) {
+                    console.error("Error executing query:", err);
+                    return;
+                  }
+                }
+              );
+              // ส่งค่ากลับไปแสดงที่จอ user
+              const product = {
+                status: 200,
+                messsage: "success",
+                product: product_name,
+                price_change: price_change,
+                money_changes: money_changes,
+              };
+              return res.json(product);
             }
           );
-        }
-        // ปรับสต็อกสินค้า
-        connection.query(
-          "UPDATE products SET amount = amount-? WHERE id = ?",
-          [1, product_id],
-          (err, results, fields) => {
-            // เช็ค error การค้นหา
-            if (err) {
-              console.error("Error executing query:", err);
-              return;
+        } else {
+          // ปรับลดสต็อกสินค้า
+          connection.query(
+            "UPDATE products SET amount = amount-? WHERE id = ?",
+            [1, product_id],
+            (err, results, fields) => {
+              // เช็ค error การค้นหา
+              if (err) {
+                console.error("Error executing query:", err);
+                return;
+              }
             }
-          }
-        );
-        // ส่งค่ากลับไปแสดงที่จอ user
-        const product = {
-          status: 200,
-          messsage: "success",
-          product: product_name,
-          price_change: price_change,
-          money_changes: money_changes,
-        };
+          );
+          // ส่งค่ากลับไปแสดงที่จอ user
+          const product = {
+            status: 200,
+            messsage: "success",
+            product: product_name,
+            price_change: price_change,
+            money_changes: money_changes,
+          };
+          return res.json(product);
+        }
       }
     }
   );

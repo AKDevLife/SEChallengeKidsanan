@@ -98,7 +98,9 @@ const App = () => {
     })
       .then((res) => res.json())
       .then((result) => {
-        console.log(result);
+        console.log(result.messsage);
+        console.log(result.product);
+        console.log(result.money_changes);
       })
       .catch((err) => {
         console.error("Error:", err);
