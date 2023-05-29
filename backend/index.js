@@ -3,6 +3,7 @@ var cors = require("cors");
 const mysql = require("mysql2");
 require("dotenv").config();
 
+// เชื่อมต่อฐานข้อมูล
 const connection = mysql.createConnection({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,

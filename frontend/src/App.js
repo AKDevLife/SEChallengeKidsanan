@@ -4,9 +4,12 @@ import "./App.css";
 const App = () => {
   const [products, setProducts] = useState([]);
   const [selectedItem, setSelectedItem] = useState([]);
-  const [showFlex, setShowFlex] = useState("");
+  const [showPuchase, setShowPuchase] = useState("");
   const [balance, setBalance] = useState(0);
   const [money, setMoney] = useState([]);
+  const [showThankYou, setShowThankYou] = useState("");
+  const [priceChange, setPriceChange] = useState(0);
+  const [remainingChanges, setRemainingChanges] = useState({});
 
   // ดึงข้อมูลจากสินค้าจาก API
   useEffect(() => {
@@ -58,13 +61,13 @@ const App = () => {
   // ฟังก์ชันกดสั่งซื้อ
   const clickPurchase = () => {
     if (selectedItem !== "") {
-      setShowFlex("d-flex");
+      setShowPuchase("d-flex");
     }
   };
 
   // ฟังก์ชันเมื่อกดสั่งซื้อ
   const cancelPurchase = () => {
-    setShowFlex("");
+    setShowPuchase("");
     setSelectedItem([]);
   };
 
@@ -77,6 +80,7 @@ const App = () => {
 
   // ฟังก์ชันคืนเงิน
   const refund = () => {
+    alert("Success! Refund ฿" + balance);
     setBalance(0);
     setMoney([]);
   };
@@ -88,7 +92,7 @@ const App = () => {
       balance: balance,
       money: money,
     };
-    console.log(JSON.stringify(orderData))
+    console.log(JSON.stringify(orderData));
     fetch("http://localhost:5000/orders", {
       method: "POST",
       headers: {
@@ -98,13 +102,41 @@ const App = () => {
     })
       .then((res) => res.json())
       .then((result) => {
-        console.log(result.messsage);
-        console.log(result.product);
-        console.log(result.money_changes);
+        if (result.status === 1) {
+          // console.log(result.product);
+          // console.log(result.money_changes);
+          setPriceChange(result.price_change);
+          setRemainingChanges(result.money_changes);
+          cancelPurchase();
+          setShowThankYou("d-flex");
+        } else {
+          alert(result.messsage + " and refund ฿" + balance);
+        }
       })
       .catch((err) => {
         console.error("Error:", err);
       });
+  };
+
+  // ฟังก์ชันแสดงเงินทอน
+  const renderMoneyChanges = () => {
+    return Object.entries(remainingChanges).map(([key, value]) =>
+      value !== 0 ? (
+        <li key={key} className="list-group-item d-flex justify-content-between align-items-start">
+          <div className="ms-2 me-auto">
+            <div className="fw-bold">฿{key}</div>
+          </div>
+          <span className="badge bg-success rounded-pill">{value}</span>
+        </li>
+      ) : null
+    );
+  };
+
+  // ฟังก์ชันปิด modal ThankYou
+  const closModalThankYou = () => {
+    setShowThankYou("");
+    setPriceChange(0);
+    setRemainingChanges({});
   };
 
   return (
@@ -123,11 +155,11 @@ const App = () => {
       </div>
 
       {/* modal ชำระเงิน */}
-      <div className={`modal-custom ${showFlex}`}>
+      <div className={`modal-custom ${showPuchase}`}>
         <div className="modal-dialog">
           <div className="modal-content">
             <div className="modal-body">
-              <div className="row ">
+              <div className="row">
                 <h1 className="col-6 text-end">{selectedItem[1]}</h1>
                 <h3 className="col-6 mt-2">฿ {selectedItem[2]}</h3>
               </div>
@@ -219,6 +251,49 @@ const App = () => {
                 onClick={sendOrder}
               >
                 Pay icon
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* modal ขอบคุณ */}
+      <div className={`modal-custom ${showThankYou}`}>
+        <div className="modal-dialog">
+          <div className="modal-content">
+            <div className="modal-body">
+              <div className="row">
+                <h1 className="col-12 text-center">Thank You</h1>
+              </div>
+              <div className="row mt-1">
+                <h5 className="col-12 text-center">
+                  please collect your product & changes
+                </h5>
+              </div>
+            </div>
+            <hr />
+            <div className="row">
+              <h3 className="col-12 text-center">... Remaining Changes ...</h3>
+            </div>
+            <ul className="list-group">
+              {renderMoneyChanges()}
+              <li key="TotalChanges" className="list-group-item bg-success text-white d-flex justify-content-between align-items-start">
+                <div className="ms-2 me-auto">
+                  <div className="fw-bold">฿{priceChange}</div>
+                </div>
+                <div className="ms-2 ms-auto">
+                  <div className="fw-bold">Total Changes</div>
+                </div>
+              </li>
+            </ul>
+            <hr />
+            <div className="modal-footer d-flex justify-content-center">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={closModalThankYou}
+              >
+                Finish
               </button>
             </div>
           </div>
