@@ -10,17 +10,6 @@ const connection = mysql.createConnection({
   database: process.env.DB_DATABASE,
 });
 
-var app = express();
-app.use(express.json());
-app.use(cors());
-
-// แสดงรายการสินค้าทั้งหมด
-app.get("/products", function (req, res, next) {
-  connection.query("SELECT * FROM `products`", function (err, results, fields) {
-    res.json(results);
-  });
-});
-
 // ฟังก์ชันคำนวณ จำนวนเงินที่ต้องทอน
 function getChange(price_change, money_stock) {
   var money = {
@@ -36,14 +25,8 @@ function getChange(price_change, money_stock) {
   var money_arr = [1000, 500, 100, 50, 20, 10, 5, 1];
   // วนลูปคำนวณหน่วยเงินแต่ละอันที่ต้องทอน
   money_arr.forEach((d, i) => {
-    // console.log("price_change:"+price_change);
-
     // คำนวณจำนวนหน่วยปัจจุบันที่สามารถใช้ทอนได้ โดยปัดเศษลงเพื่อให้ได้ค่าที่ใกล้และทอนได้
     var num = Math.floor(price_change / d);
-
-    // console.log("num:"+num);
-    // console.log("money_stock:"+money_stock[d]);
-
     // ถ้าจำนวนธนบัติที่ต้องทอน มีเพียงพอในสต็อก
     if (num <= money_stock[d]) {
       // ปรับจำนวนเงินที่เหลืออยู่ -เอาเศษมาใช้
@@ -57,11 +40,24 @@ function getChange(price_change, money_stock) {
       money[d] += money_stock[d];
     }
   });
-
-  // console.log(money);
-
-  return money;
+  // ถ้าไม่สามารถคืนเงินให้ลูกค้าทั้งหมดได้
+  if (price_change !== 0) {
+    return false;
+  } else {
+    return money;
+  }
 }
+
+var app = express();
+app.use(express.json());
+app.use(cors());
+
+// แสดงรายการสินค้าทั้งหมด
+app.get("/products", function (req, res, next) {
+  connection.query("SELECT * FROM `products`", function (err, results, fields) {
+    res.json(results);
+  });
+});
 
 // คำนวณออเดอร์
 app.post("/orders", function (req, res, next) {
@@ -82,7 +78,7 @@ app.post("/orders", function (req, res, next) {
       const product_name = results[0].name;
       const product_price = results[0].price;
       const product_amount = results[0].amount;
-      // เช็ค error การค้นหา
+      // เช็ค error
       if (err) {
         console.error("Error executing SELECT query:", err);
         return;
@@ -90,7 +86,7 @@ app.post("/orders", function (req, res, next) {
       // เช็คว่าสินค้าหมดหรือไม่
       if (product_amount == 0) {
         const product = {
-          status: 500,
+          status: 3,
           messsage: product_name + " Out of stock!",
         };
         return res.json(product);
@@ -105,7 +101,7 @@ app.post("/orders", function (req, res, next) {
               "UPDATE money SET quantity = quantity+? WHERE cost = ?",
               [1, data],
               (err, results, fields) => {
-                // เช็ค error การค้นหา
+                // เช็ค error
                 if (err) {
                   console.error("Error executing query:", err);
                   return;
@@ -117,7 +113,7 @@ app.post("/orders", function (req, res, next) {
           connection.query(
             "SELECT * FROM money",
             function (err, results, fields) {
-              // เช็ค error การค้นหา
+              // เช็ค error
               if (err) {
                 console.error("Error executing query:", err);
                 return;
@@ -130,13 +126,35 @@ app.post("/orders", function (req, res, next) {
               price_change = req_balance - product_price;
               // เรียกใช้ฟังก์ชันคำนวณเงินทอน
               money_changes = getChange(price_change, money_stock);
+              // ถ้าฟังก์ชันคำนวณเงินทอน คำนวณแล้วเงินไม่เพียงพอที่จะคืน
+              if (money_changes == false) {
+                // ปรับลดสต๊อกเหรียญ/แบงค์ ที่ต้องคืนให้ลูกค้า
+                req_money.forEach((data) => {
+                  connection.query(
+                    "UPDATE money SET quantity = quantity-? WHERE cost = ?",
+                    [1, data],
+                    (err, results, fields) => {
+                      // เช็ค error
+                      if (err) {
+                        console.error("Error executing query:", err);
+                        return;
+                      }
+                    }
+                  );
+                });
+                const product = {
+                  status: 3,
+                  messsage: "Sorry not enough change!",
+                };
+                return res.json(product);
+              }
               // ปรับลดสต๊อกเหรียญ/แบงค์ จากที่ทอนลูกค้า
               for (let key in money_changes) {
                 connection.query(
                   "UPDATE money SET quantity = quantity-? WHERE cost = ?",
                   [money_changes[key], key],
                   (err, results, fields) => {
-                    // เช็ค error การค้นหา
+                    // เช็ค error
                     if (err) {
                       console.error("Error executing query:", err);
                       return;
@@ -149,7 +167,7 @@ app.post("/orders", function (req, res, next) {
                 "UPDATE products SET amount = amount-? WHERE id = ?",
                 [1, product_id],
                 (err, results, fields) => {
-                  // เช็ค error การค้นหา
+                  // เช็ค error
                   if (err) {
                     console.error("Error executing query:", err);
                     return;
@@ -158,7 +176,7 @@ app.post("/orders", function (req, res, next) {
               );
               // ส่งค่ากลับไปแสดงที่จอ user
               const product = {
-                status: 200,
+                status: 1,
                 messsage: "success",
                 product: product_name,
                 price_change: price_change,
@@ -173,7 +191,7 @@ app.post("/orders", function (req, res, next) {
             "UPDATE products SET amount = amount-? WHERE id = ?",
             [1, product_id],
             (err, results, fields) => {
-              // เช็ค error การค้นหา
+              // เช็ค error
               if (err) {
                 console.error("Error executing query:", err);
                 return;
@@ -182,7 +200,7 @@ app.post("/orders", function (req, res, next) {
           );
           // ส่งค่ากลับไปแสดงที่จอ user
           const product = {
-            status: 200,
+            status: 1,
             messsage: "success",
             product: product_name,
             price_change: price_change,
