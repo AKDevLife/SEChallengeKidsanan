@@ -30,13 +30,13 @@ function getChange(price_change, money_stock) {
     var num = Math.floor(price_change / d);
     // ถ้าจำนวนธนบัติที่ต้องทอน มีเพียงพอในสต็อก
     if (num <= money_stock[d]) {
-      // ปรับจำนวนเงินที่เหลืออยู่ -เอาเศษมาใช้
+      // ปรับจำนวนเงินที่เหลืออยู่ -เอาเศษมาใช้คำนวณต่อ
       price_change = price_change % d;
       // บวกหน่วยเงินนั้นตามจำนวนที่สามารถทอนเงินได้
       money[d] += num;
     } else if (num > money_stock[d] && money_stock[d] !== 0) {
       // ปรับจำนวนเงินที่เหลืออยู่ -เอาเศษมาใช้
-      price_change = price_change - d * money_stock[d];
+      price_change = price_change - (d * money_stock[d]);
       // บวกหน่วยเงินนั้นตามจำนวนที่สามารถทอนเงินได้
       money[d] += money_stock[d];
     }
