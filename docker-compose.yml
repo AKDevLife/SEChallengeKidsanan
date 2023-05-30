@@ -1,0 +1,60 @@
+version: '3'
+ 
+services:
+  db:
+    image: mysql:5.7
+    container_name: db
+    environment:
+      MYSQL_ROOT_PASSWORD: aum123
+      MYSQL_DATABASE: machine-vending
+      MYSQL_USER: aum123
+      MYSQL_PASSWORD: aum123
+    ports:
+      - "6033:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - mynetwork
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: pma
+    links:
+      - db
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+    restart: always
+    ports:
+      - 8081:80
+    networks:
+      - mynetwork
+
+  api:
+    build: ./backend/
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_USER: aum123
+      DB_PASSWORD: aum123
+      DB_DATABASE: machine-vending
+    networks:
+      - mynetwork
+  
+  web:
+    build: ./frontend/
+    ports:
+      - "3000:3000"
+    networks:
+      - mynetwork
+
+networks:
+  mynetwork:
+    driver: bridge
+
+volumes:
+  dbdata:
