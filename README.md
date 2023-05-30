@@ -1,2 +1,2 @@
-# SEChallengeKidsanan
-SEChallengeKidsanan
+# Vending Machine
+Vending Machine
