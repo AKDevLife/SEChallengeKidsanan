@@ -1,6 +1,11 @@
 # Vending Machine
 Is an application for automatic shopping by inserting enough coins or banknotes and waiting to receive the product.
 
+**Installation**
+ - ...
+ - ...
+ - ...
+
 **Order process**
  1. Choose products that are not out of stock.
  2. Press to order.
